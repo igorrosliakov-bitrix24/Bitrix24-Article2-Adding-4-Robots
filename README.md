@@ -151,8 +151,8 @@ make prod-python
 # Продакшн с Node.js
 make prod-node
 
-# Только база данных + фронтенд (для тестирования)
-COMPOSE_PROFILES= docker-compose up database frontend
+# Только PostgreSQL + фронтенд (для тестирования)
+COMPOSE_PROFILES=db-postgres,frontend docker compose up --build
 
 # Полный стек
 COMPOSE_PROFILES=php,worker docker-compose up -d
@@ -163,9 +163,12 @@ COMPOSE_PROFILES=php,worker docker-compose up -d
 Для использования в production-среде настоятельно рекомендуется внести свои значения в переменные окружения:
 
 JWT_SECRET - для шифрования JWT-токенов обмена данными между frontend и backend.
-DB_USER - имя пользователя базы данных PostgreSQL
-DB_PASSWORD - пароль пользователя базы данных PostgreSQL
-DB_NAME - имя базы данных PostgreSQL
+DB_TYPE - тип СУБД (`postgresql` или `mysql`)
+DB_USER - имя пользователя базы данных
+DB_PASSWORD - пароль пользователя базы данных
+DB_NAME - имя базы данных
+DB_PORT - порт выбранной СУБД (`5432` для PostgreSQL, `3306` для MySQL)
+DATABASE_URL - DSN для PHP/Doctrine (автоматически настраивается через `make dev-init`)
 BUILD_TARGET установить в `production` - для сборки фронтенда в production режиме.
 DJANGO_SUPERUSER_USERNAME - имя суперпользователя Django в случае backend на Python
 DJANGO_SUPERUSER_EMAIL - email суперпользователя Django.
@@ -186,12 +189,12 @@ DJANGO_SUPERUSER_PASSWORD - пароль суперпользователя Djan
 
 - **PHP**: Symfony 7, Doctrine ORM, PHP SDK для Bitrix24
 - **Python**: Django, Python SDK для Bitrix24
-- **Node.js**: Express, pg (PostgreSQL), JWT, JS SDK для Bitrix24
+- **Node.js**: Express, PostgreSQL/MySQL, JWT, JS SDK для Bitrix24
 
 ### Infrastructure
 
 - **Docker & Docker Compose**
-- **PostgreSQL 17**
+- **PostgreSQL 17 / MySQL 8.4**
 - **Cloudpub** (ngrok-like) для туннелирования
 - **Nginx** (production)
 

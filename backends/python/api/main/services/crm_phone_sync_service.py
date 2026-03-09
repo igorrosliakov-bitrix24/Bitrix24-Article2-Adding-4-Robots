@@ -1,4 +1,3 @@
-import logging
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
@@ -6,9 +5,6 @@ from .bitrix_client import BitrixClientService
 
 if TYPE_CHECKING:
     from ..models import Bitrix24Account
-
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -27,66 +23,38 @@ class CRMPhoneSyncService:
 
     def sync_from_document(self, payload: dict[str, Any], default_country_code: str) -> list[PhoneSyncItem]:
         document_token = self._extract_document_token(payload)
-        logger.info(
-            "format_phone sync_from_document token=%r payload_document_keys=%s",
-            document_token,
-            self._collect_document_debug_keys(payload),
-        )
         if not document_token:
-            logger.warning("format_phone document token is missing")
             return []
 
         if document_token.startswith("DEAL_"):
             deal_id = int(document_token.split("_", 1)[1])
-            logger.info("format_phone detected deal document deal_id=%s", deal_id)
             return self._sync_from_deal(deal_id, default_country_code)
 
         if document_token.startswith("CONTACT_"):
             contact_id = int(document_token.split("_", 1)[1])
-            logger.info("format_phone detected contact document contact_id=%s", contact_id)
             sync_item = self._sync_entity_phones("contact", contact_id, default_country_code)
             return [sync_item] if sync_item else []
 
         if document_token.startswith("COMPANY_"):
             company_id = int(document_token.split("_", 1)[1])
-            logger.info("format_phone detected company document company_id=%s", company_id)
             sync_item = self._sync_entity_phones("company", company_id, default_country_code)
             return [sync_item] if sync_item else []
 
-        logger.warning("format_phone unsupported document token=%r", document_token)
         return []
 
     def _sync_from_deal(self, deal_id: int, default_country_code: str) -> list[PhoneSyncItem]:
         deal_response = self.bitrix_client.call_method("crm.deal.get", {"id": deal_id})
         deal = self._extract_result(deal_response)
-        logger.info("format_phone deal_id=%s raw_deal_result=%r", deal_id, deal)
 
         sync_items: list[PhoneSyncItem] = []
         for entity_type, entity_key in (("contact", "CONTACT_ID"), ("company", "COMPANY_ID")):
             entity_id = self._normalize_entity_id(deal.get(entity_key)) if isinstance(deal, dict) else None
             if entity_id is None:
-                logger.info(
-                    "format_phone deal_id=%s has no linked %s via %s value=%r",
-                    deal_id,
-                    entity_type,
-                    entity_key,
-                    deal.get(entity_key) if isinstance(deal, dict) else None,
-                )
                 continue
 
-            logger.info(
-                "format_phone deal_id=%s linked %s_id=%s via %s",
-                deal_id,
-                entity_type,
-                entity_id,
-                entity_key,
-            )
             sync_item = self._sync_entity_phones(entity_type, entity_id, default_country_code)
             if sync_item is not None:
                 sync_items.append(sync_item)
-
-        if not sync_items:
-            logger.warning("format_phone deal_id=%s produced no sync items", deal_id)
 
         return sync_items
 
@@ -102,24 +70,11 @@ class CRMPhoneSyncService:
         entity_response = self.bitrix_client.call_method(get_method, {"id": entity_id})
         entity = self._extract_result(entity_response)
         if not isinstance(entity, dict):
-            logger.warning(
-                "format_phone %s_id=%s returned non-dict entity=%r",
-                entity_type,
-                entity_id,
-                entity,
-            )
             return None
 
         phones_before = entity.get("PHONE")
         if not isinstance(phones_before, list):
             phones_before = []
-        logger.info(
-            "format_phone %s_id=%s phones_before_count=%s phones_before=%r",
-            entity_type,
-            entity_id,
-            len(phones_before),
-            phones_before,
-        )
 
         phones_after: list[dict[str, Any]] = []
         updated_phone_count = 0
@@ -148,12 +103,6 @@ class CRMPhoneSyncService:
             phones_after.append(updated_phone)
 
         if updated_phone_count > 0:
-            logger.info(
-                "format_phone %s_id=%s updating phones_after=%r",
-                entity_type,
-                entity_id,
-                phones_after,
-            )
             self.bitrix_client.call_method(
                 update_method,
                 {
@@ -162,13 +111,6 @@ class CRMPhoneSyncService:
                         "PHONE": phones_after,
                     },
                 },
-            )
-        else:
-            logger.info(
-                "format_phone %s_id=%s no phone changes detected phones_after=%r",
-                entity_type,
-                entity_id,
-                phones_after,
             )
 
         return PhoneSyncItem(
@@ -213,14 +155,6 @@ class CRMPhoneSyncService:
                 return document_token
 
         return None
-
-    @staticmethod
-    def _collect_document_debug_keys(payload: dict[str, Any]) -> dict[str, Any]:
-        document_keys = {}
-        for key in payload:
-            if "document" in key.lower():
-                document_keys[key] = payload[key]
-        return document_keys
 
     @staticmethod
     def _normalize_entity_id(value: Any) -> int | None:

@@ -77,30 +77,11 @@ ROBOT_DEFINITIONS = [
             },
         },
     ),
-    RobotDefinition(
-        code="system_ping",
-        handler_path="/api/robots/execute/system_ping",
-        name=_localized("Проверка каркаса роботов", "Robot Skeleton Check"),
-        description=_localized(
-            "Временный диагностический робот для локальной отладки",
-            "Temporary diagnostic robot for local debugging",
-        ),
-        return_properties={
-            "message": {
-                "Name": _localized("Сообщение", "Message"),
-                "Type": "string",
-            },
-            "mode": {
-                "Name": _localized("Режим", "Mode"),
-                "Type": "string",
-            },
-        },
-    ),
 ]
 
 
 def get_robot_definitions() -> list[RobotDefinition]:
-    return [robot_definition for robot_definition in ROBOT_DEFINITIONS if robot_definition.code != "system_ping"]
+    return ROBOT_DEFINITIONS
 
 
 def get_robot_definition(robot_code: str) -> RobotDefinition | None:

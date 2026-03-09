@@ -1,3 +1,4 @@
+from ..services.crm_phone_sync_service import CRMPhoneSyncService, PhoneSyncItem, format_phone_value, normalize_country_code
 from ..services.robot_types import RobotExecutionContext, RobotHandlerResult
 
 
@@ -17,43 +18,55 @@ def _read_property(payload: dict, *paths: tuple[str, ...]) -> str:
     return ""
 
 
-def _normalize_country_code(raw_country_code: str) -> str:
-    digits = "".join(char for char in raw_country_code if char.isdigit())
-    return digits or "7"
+def _debug_sync_items(payload: dict, default_country_code: str) -> list[PhoneSyncItem]:
+    debug_entities = payload.get("debug_entities")
+    if not isinstance(debug_entities, dict):
+        return []
 
+    sync_items: list[PhoneSyncItem] = []
 
-def _extract_digits(raw_phone: str) -> str:
-    return "".join(char for char in raw_phone if char.isdigit())
+    for entity_type in ("contact", "company"):
+        entity_data = debug_entities.get(entity_type)
+        if not isinstance(entity_data, dict):
+            continue
 
+        phones_before = entity_data.get("PHONE")
+        if not isinstance(phones_before, list):
+            continue
 
-def _format_phone(raw_phone: str, default_country_code: str) -> tuple[str, str, bool]:
-    digits_only = _extract_digits(raw_phone)
-    country_code = _normalize_country_code(default_country_code)
+        phones_after = []
+        updated_phone_count = 0
 
-    if not digits_only:
-        return "", "", False
+        for phone_item in phones_before:
+            if not isinstance(phone_item, dict):
+                continue
 
-    if len(digits_only) == 11 and digits_only.startswith("8"):
-        digits_only = f"7{digits_only[1:]}"
-    elif len(digits_only) == 10:
-        digits_only = f"{country_code}{digits_only}"
-    elif raw_phone.strip().startswith("00") and len(digits_only) > 2:
-        digits_only = digits_only[2:]
+            phone_value = str(phone_item.get("VALUE", ""))
+            formatted_phone, _, is_valid = format_phone_value(phone_value, default_country_code)
+            updated_value = formatted_phone if is_valid else phone_value
+            if updated_value != phone_value:
+                updated_phone_count += 1
 
-    is_valid = 11 <= len(digits_only) <= 15
-    formatted_phone = f"+{digits_only}" if is_valid else digits_only
+            phones_after.append({
+                "VALUE": updated_value,
+                "VALUE_TYPE": phone_item.get("VALUE_TYPE", "WORK"),
+            })
 
-    return formatted_phone, digits_only, is_valid
+        sync_items.append(
+            PhoneSyncItem(
+                entity_type=entity_type,
+                entity_id=int(entity_data.get("ID", 0)),
+                phones_before=phones_before,
+                phones_after=phones_after,
+                updated_phone_count=updated_phone_count,
+                updated=updated_phone_count > 0,
+            )
+        )
+
+    return sync_items
 
 
 def handle_format_phone(context: RobotExecutionContext) -> RobotHandlerResult:
-    raw_phone = _read_property(
-        context.payload,
-        ("phone",),
-        ("PHONE",),
-        ("properties", "phone"),
-        ("properties", "PHONE"),
-    )
     default_country_code = _read_property(
         context.payload,
         ("default_country_code",),
@@ -62,18 +75,36 @@ def handle_format_phone(context: RobotExecutionContext) -> RobotHandlerResult:
         ("properties", "DEFAULT_COUNTRY_CODE"),
     )
 
-    formatted_phone, digits_only, is_valid = _format_phone(raw_phone, default_country_code)
+    if context.bitrix24_account is not None:
+        sync_items = CRMPhoneSyncService(context.bitrix24_account).sync_from_document(
+            context.payload,
+            default_country_code,
+        )
+    else:
+        sync_items = _debug_sync_items(context.payload, default_country_code)
+
+    total_entities = len(sync_items)
+    updated_entities = sum(1 for item in sync_items if item.updated)
+    updated_phone_count = sum(item.updated_phone_count for item in sync_items)
+
+    entity_summary_parts = []
+    for item in sync_items:
+        entity_summary_parts.append(f"{item.entity_type}:{item.entity_id}:{item.updated_phone_count}")
+
+    entity_summary = ", ".join(entity_summary_parts)
 
     return RobotHandlerResult(
         return_values={
-            "formatted_phone": formatted_phone,
-            "digits_only": digits_only,
-            "is_valid": "Y" if is_valid else "N",
+            "processed_entities": str(total_entities),
+            "updated_entities": str(updated_entities),
+            "updated_phone_count": str(updated_phone_count),
+            "entity_summary": entity_summary,
         },
         log_message=(
-            f"format_phone processed input='{raw_phone}', "
-            f"formatted='{formatted_phone}', "
-            f"valid={'Y' if is_valid else 'N'}, "
-            f"country_code='{_normalize_country_code(default_country_code)}'"
+            f"format_phone processed entities={total_entities}, "
+            f"updated_entities={updated_entities}, "
+            f"updated_phone_count={updated_phone_count}, "
+            f"country_code='{normalize_country_code(default_country_code)}', "
+            f"summary='{entity_summary}'"
         ),
     )

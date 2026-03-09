@@ -60,16 +60,16 @@ Notes:
 
 Added the first real robot: `format_phone`.
 
-Robot inputs:
+Robot input:
 
-- `phone` - required phone number string
 - `default_country_code` - optional country code, default `7`
 
 Robot outputs:
 
-- `formatted_phone`
-- `digits_only`
-- `is_valid`
+- `processed_entities`
+- `updated_entities`
+- `updated_phone_count`
+- `entity_summary`
 
 Local quick check:
 
@@ -77,10 +77,16 @@ Local quick check:
 curl -s http://127.0.0.1:8000/api/robots/catalog | jq
 curl -s -X POST http://127.0.0.1:8000/api/robots/debug/execute/format_phone \
   -H 'Content-Type: application/json' \
-  -d '{"phone":"8 (999) 123-45-67","default_country_code":"7"}' | jq
+  -d '{"document_id":["crm","CCrmDocumentDeal","DEAL_42"],"properties":{"default_country_code":"7"},"debug_entities":{"contact":{"ID":101,"PHONE":[{"VALUE":"8 (999) 123-45-67","VALUE_TYPE":"MOBILE"}]},"company":{"ID":202,"PHONE":[{"VALUE":"9991230000","VALUE_TYPE":"WORK"}]}}}' | jq
 ```
 
 Expected result:
 
-- catalog contains `format_phone`
-- debug execute returns `formatted_phone: "+79991234567"`
+- catalog contains `format_phone` without manual `phone` property
+- debug execute returns non-zero `updated_phone_count`
+
+Behavior:
+
+- on deal automation the robot reads the linked primary contact and linked company
+- it formats all their `PHONE` values
+- then saves updated values back to CRM

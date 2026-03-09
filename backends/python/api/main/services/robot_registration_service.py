@@ -56,44 +56,50 @@ def register_robots_in_bitrix24(
 
     for robot_definition in get_robot_definitions():
         payload = robot_definition.to_registration_payload(app_base_url, auth_user_id)
-        method_name = "bizproc.robot.update" if robot_definition.code in existing_robot_codes else "bizproc.robot.add"
 
         try:
-            bitrix_client.call_method(method_name, payload)
+            if robot_definition.code in existing_robot_codes:
+                logger.info(
+                    "Robot '%s' already exists in Bitrix24, deleting before re-adding",
+                    robot_definition.code,
+                )
+                bitrix_client.call_method(
+                    "bizproc.robot.delete",
+                    {"CODE": robot_definition.code},
+                )
+                action = "recreated"
+            else:
+                action = "added"
+
+            bitrix_client.call_method("bizproc.robot.add", payload)
         except BitrixAPIError as error:
             error_message = getattr(error, "message", str(error))
             error_message_lower = error_message.lower()
 
-            if method_name == "bizproc.robot.add" and "already installed" in error_message_lower:
+            if "already installed" in error_message_lower:
                 logger.info(
-                    "Robot '%s' already exists in Bitrix24, switching to update",
+                    "Robot '%s' still exists in Bitrix24, deleting and retrying add",
                     robot_definition.code,
                 )
-                try:
-                    bitrix_client.call_method("bizproc.robot.update", payload)
-                    method_name = "bizproc.robot.update"
-                except BitrixAPIError as update_error:
-                    update_error_message = getattr(update_error, "message", str(update_error))
-
-                    if "no fields to update" in update_error_message.lower():
-                        logger.info(
-                            "Robot '%s' is already up to date in Bitrix24",
-                            robot_definition.code,
-                        )
-                        method_name = "bizproc.robot.update"
-                    else:
-                        raise
-            elif method_name == "bizproc.robot.update" and "no fields to update" in error_message_lower:
+                bitrix_client.call_method(
+                    "bizproc.robot.delete",
+                    {"CODE": robot_definition.code},
+                )
+                bitrix_client.call_method("bizproc.robot.add", payload)
+                action = "recreated"
+            elif "not found" in error_message_lower:
                 logger.info(
-                    "Robot '%s' is already up to date in Bitrix24",
+                    "Robot '%s' was not found during delete/update flow, retrying add",
                     robot_definition.code,
                 )
+                bitrix_client.call_method("bizproc.robot.add", payload)
+                action = "added"
             else:
                 raise
 
         registration_results.append({
             "code": robot_definition.code,
-            "action": "updated" if method_name.endswith("update") else "added",
+            "action": action,
         })
 
     return registration_results

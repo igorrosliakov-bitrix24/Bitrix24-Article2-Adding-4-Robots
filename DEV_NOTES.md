@@ -32,28 +32,28 @@ Notes:
 Added a minimal robot integration skeleton for the Python backend:
 
 - robot registry
-- robot registration service for `bizproc.robot.add` / `bizproc.robot.update`
+- robot registration service for `bizproc.robot.add`
 - robot execution endpoint for Bitrix24
 - result sending service for `bizproc.event.send`
-- temporary debug endpoint for local manual verification without Bitrix24
+- debug endpoint for local manual verification without Bitrix24
 
 Manual check:
 
 ```bash
 curl -s http://127.0.0.1:8000/api/robots/catalog
-curl -s -X POST http://127.0.0.1:8000/api/robots/debug/execute/system_ping \
+curl -s -X POST http://127.0.0.1:8000/api/robots/debug/execute/format_phone \
   -H 'Content-Type: application/json' \
-  -d '{"check":"stage2"}'
+  -d '{"document_id":["crm","CCrmDocumentDeal","DEAL_42"],"properties":{"default_country_code":"7"},"debug_entities":{"contact":{"ID":101,"PHONE":[{"VALUE":"8 (999) 123-45-67","VALUE_TYPE":"MOBILE"}]}}}'
 ```
 
 Expected result:
 
-- catalog contains `system_ping`
-- debug execution returns `status=success`, `delivery=local`, `robot_code=system_ping`
+- catalog contains registered robots from the app
+- debug execution returns `status=success`, `delivery=local`, `robot_code=format_phone`
 
 Notes:
 
-- `POST /api/robots/debug/execute/<robot_code>` is a temporary local verification endpoint.
+- `POST /api/robots/debug/execute/<robot_code>` is a local verification endpoint.
 - Real Bitrix24 calls should use `POST /api/robots/execute/<robot_code>`.
 
 ## Stage 3

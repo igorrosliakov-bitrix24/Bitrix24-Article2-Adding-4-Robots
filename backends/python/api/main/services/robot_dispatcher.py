@@ -1,6 +1,5 @@
 from .robot_types import RobotExecutionContext, RobotHandlerResult
 from ..robot_handlers.format_phone_handler import handle_format_phone
-from ..robot_handlers.system_ping_handler import handle_system_ping
 
 
 class RobotHandlerNotFoundError(ValueError):
@@ -9,7 +8,6 @@ class RobotHandlerNotFoundError(ValueError):
 
 ROBOT_HANDLERS = {
     "format_phone": handle_format_phone,
-    "system_ping": handle_system_ping,
 }
 
 

@@ -32,6 +32,35 @@ const progressValue = ref<null | number>(null)
 const apiStore = useApiStore()
 // endregion ////
 
+function buildInstallPayload() {
+  const authData = $b24.auth.getAuthData()
+
+  if(authData === false) {
+    throw new Error('Some problem with auth. See App logic')
+  }
+
+  return {
+    DOMAIN: withoutTrailingSlash(authData.domain).replace('https://', '').replace('http://', ''),
+    PROTOCOL: authData.domain.includes('https://') ? 1 : 0,
+    LICENSE: steps.value.init?.data?.appInfo.LICENSE,
+    LICENSE_FAMILY: steps.value.init?.data?.appInfo.LICENSE_FAMILY,
+    LANG: $b24.getLang(),
+    APP_SID: $b24.getAppSid(),
+    AUTH_ID: authData.access_token,
+    AUTH_EXPIRES: authData.expires_in,
+    REFRESH_ID: authData.refresh_token,
+    REFRESH_TOKEN: authData.refresh_token,
+    member_id: authData.member_id,
+    user_id: Number(steps.value.init?.data?.profile.ID),
+    status: steps.value.init?.data?.appInfo.STATUS,
+    appVersion: Number(steps.value.init?.data?.appInfo.VERSION),
+    appCode: steps.value.init?.data?.appInfo.CODE,
+    appId: Number(steps.value.init?.data?.appInfo.ID),
+    PLACEMENT: $b24.placement.title,
+    PLACEMENT_OPTIONS: $b24.placement.options
+  }
+}
+
 // region Steps ////
 const steps = ref<Record<string, IStep>>({
   init: {
@@ -188,31 +217,15 @@ const steps = ref<Record<string, IStep>>({
   serverSide: {
     caption: t('page.install.step.serverSide.caption'),
     action: async () => {
-      const authData = $b24.auth.getAuthData()
-
-      if(authData === false) {
-        throw new Error('Some problem with auth. See App logic')
-      }
-
-      await apiStore.postInstall({
-        DOMAIN: withoutTrailingSlash(authData.domain).replace('https://', '').replace('http://', ''),
-        PROTOCOL: authData.domain.includes('https://') ? 1 : 0,
-        LICENSE: steps.value.init?.data?.appInfo.LICENSE,
-        LICENSE_FAMILY: steps.value.init?.data?.appInfo.LICENSE_FAMILY,
-        LANG: $b24.getLang(),
-        APP_SID: $b24.getAppSid(),
-        AUTH_ID: authData.access_token,
-        AUTH_EXPIRES: authData.expires_in,
-        REFRESH_ID: authData.refresh_token,
-        REFRESH_TOKEN: authData.refresh_token,
-        member_id: authData.member_id,
-        user_id: Number(steps.value.init?.data?.profile.ID),
-        status: steps.value.init?.data?.appInfo.STATUS,
-        appVersion: Number(steps.value.init?.data?.appInfo.VERSION),
-        appCode: steps.value.init?.data?.appInfo.CODE,
-        appId: Number(steps.value.init?.data?.appInfo.ID),
-        PLACEMENT: $b24.placement.title,
-        PLACEMENT_OPTIONS: $b24.placement.options
+      await apiStore.postInstall(buildInstallPayload())
+    }
+  },
+  robots: {
+    caption: t('page.install.step.robots.caption'),
+    action: async () => {
+      await apiStore.registerRobots({
+        ...buildInstallPayload(),
+        AUTH_USER_ID: Number(steps.value.init?.data?.profile.ID)
       })
     }
   },

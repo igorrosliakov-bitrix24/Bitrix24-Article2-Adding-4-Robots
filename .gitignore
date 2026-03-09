@@ -6,6 +6,8 @@
 .cache
 dist
 
+.vscode
+
 # Node dependencies
 node_modules
 .pnpm-store

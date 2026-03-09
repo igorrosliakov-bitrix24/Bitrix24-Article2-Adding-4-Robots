@@ -42,6 +42,9 @@
         "serverSide": {
           "caption": "Server-side scripts..."
         },
+        "robots": {
+          "caption": "Robots..."
+        },
         "finish": {
           "caption": "Completion"
         }

@@ -69,6 +69,20 @@ export const useApiStore = defineStore(
       })
     }
 
+    const registerRobots = async (data: Record<string, any> = {}): Promise<Record<string, any>> => {
+      const headers: Record<string, string> = {}
+
+      if (tokenJWT.value.length > 2) {
+        headers.Authorization = `Bearer ${tokenJWT.value}`
+      }
+
+      return await $api('/api/robots/register', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(data),
+      })
+    }
+
     const init = async (b24: B24Frame) => {
       $b24 = b24
       await reinitToken()
@@ -111,7 +125,8 @@ export const useApiStore = defineStore(
       init,
       getEnum,
       getList,
-      postInstall
+      postInstall,
+      registerRobots
     }
   }
 )

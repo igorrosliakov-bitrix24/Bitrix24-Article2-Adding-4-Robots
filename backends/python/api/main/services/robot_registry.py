@@ -47,15 +47,10 @@ ROBOT_DEFINITIONS = [
         handler_path="/api/robots/execute/format_phone",
         name=_localized("Форматировать телефон", "Format Phone"),
         description=_localized(
-            "Приводит номер телефона к единому формату и возвращает результат",
-            "Converts a phone number to a unified format and returns the result",
+            "Автоматически нормализует все телефоны связанного контакта и компании",
+            "Automatically normalizes all phones of the linked contact and company",
         ),
         properties={
-            "phone": {
-                "Name": _localized("Телефон", "Phone"),
-                "Type": "string",
-                "Required": "Y",
-            },
             "default_country_code": {
                 "Name": _localized("Код страны по умолчанию", "Default country code"),
                 "Type": "string",
@@ -64,17 +59,21 @@ ROBOT_DEFINITIONS = [
             },
         },
         return_properties={
-            "formatted_phone": {
-                "Name": _localized("Форматированный телефон", "Formatted phone"),
-                "Type": "string",
+            "processed_entities": {
+                "Name": _localized("Обработано сущностей", "Processed entities"),
+                "Type": "int",
             },
-            "digits_only": {
-                "Name": _localized("Только цифры", "Digits only"),
-                "Type": "string",
+            "updated_entities": {
+                "Name": _localized("Изменено сущностей", "Updated entities"),
+                "Type": "int",
             },
-            "is_valid": {
-                "Name": _localized("Валиден", "Is valid"),
-                "Type": "bool",
+            "updated_phone_count": {
+                "Name": _localized("Изменено телефонов", "Updated phone count"),
+                "Type": "int",
+            },
+            "entity_summary": {
+                "Name": _localized("Сводка по сущностям", "Entity summary"),
+                "Type": "string",
             },
         },
     ),

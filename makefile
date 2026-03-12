@@ -1,4 +1,4 @@
-.PHONY: help dev-init create-version delete-version dev-front dev-php dev-python dev-node prod-php prod-python prod-node status ps down down-all logs logs-nginxproxy clean composer-install composer-update composer-dumpautoload composer db-create db-migrate db-migrate-create db-schema-update db-schema-validate queue-up queue-down
+.PHONY: help dev-init create-version delete-version dev-front dev-php dev-python dev-python-worker dev-node prod-php prod-python prod-node status ps down down-all logs logs-nginxproxy clean composer-install composer-update composer-dumpautoload composer db-create db-migrate db-migrate-create db-schema-update db-schema-validate queue-up queue-down
 
 # Variables
 DOCKER_COMPOSE = docker compose
@@ -17,6 +17,7 @@ help: ## Show this help message
 	@echo "  dev-front         Start frontend only"
 	@echo "  dev-php           Start with PHP backend"
 	@echo "  dev-python        Start with Python backend"
+	@echo "  dev-python-worker Start Python worker only"
 	@echo "  dev-node          Start with Node.js backend"
 	@echo ""
 	@echo "🚀 Production:"
@@ -213,11 +214,18 @@ dev-python:
 	ENABLE_RABBITMQ_VALUE=$$(grep -E '^ENABLE_RABBITMQ=' .env 2>/dev/null | tail -n1 | cut -d= -f2); \
 	if [ -z "$$ENABLE_RABBITMQ_VALUE" ]; then ENABLE_RABBITMQ_VALUE=0; fi; \
 	if [ "$$ENABLE_RABBITMQ_VALUE" = "1" ]; then \
-	  PROFILES="frontend,python,cloudpub,queue,$$DB_PROFILE"; \
+	  PROFILES="frontend,python,python-worker,cloudpub,queue,$$DB_PROFILE"; \
 	else \
 	  PROFILES="frontend,python,cloudpub,$$DB_PROFILE"; \
 	fi; \
 	COMPOSE_PROFILES=$$PROFILES docker compose --env-file .env up --build
+
+dev-python-worker:
+	@echo "Starting python worker"
+	@DB_TYPE_VALUE=$$(grep -E '^DB_TYPE=' .env 2>/dev/null | tail -n1 | cut -d= -f2); \
+	if [ -z "$$DB_TYPE_VALUE" ]; then DB_TYPE_VALUE=postgresql; fi; \
+	if [ "$$DB_TYPE_VALUE" = "mysql" ]; then DB_PROFILE="db-mysql"; else DB_PROFILE="db-postgres"; fi; \
+	COMPOSE_PROFILES=python-worker,queue,$$DB_PROFILE docker compose --env-file .env up --build api-python-worker rabbitmq
 
 ## NodeJs
 dev-node:
@@ -256,7 +264,7 @@ ps:
 
 down:
 	@echo "🛑 Останавливаем все контейнеры..."
-	COMPOSE_PROFILES=frontend,php,python,node,cloudpub,queue,db-postgres,db-mysql docker compose down --remove-orphans || true
+	COMPOSE_PROFILES=frontend,php,python,python-worker,node,cloudpub,queue,db-postgres,db-mysql docker compose down --remove-orphans || true
 	docker container stop $$(docker container ls -q --filter "name=b24" --filter "name=frontend" --filter "name=api" --filter "name=cloudpub") 2>/dev/null || true
 
 queue-up:
@@ -308,4 +316,3 @@ db-restore:
 	else \
 	  COMPOSE_PROFILES=db-postgres docker compose exec -T database-postgres psql -U $${DB_USER:-appuser} $${DB_NAME:-appdb} < $(file); \
 	fi
-

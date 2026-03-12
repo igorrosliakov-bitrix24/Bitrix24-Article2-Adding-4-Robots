@@ -10,6 +10,7 @@ urlpatterns = [
     path('api/robots/register', register_robots, name='register_robots'),
     path('api/robots/execute/<str:robot_code>', execute_robot, name='execute_robot'),
     path('api/robots/debug/execute/<str:robot_code>', debug_execute_robot, name='debug_execute_robot'),
+    path('api/robots/debug/queue/<str:robot_code>', debug_queue_robot, name='debug_queue_robot'),
     path('api/enum', get_enum, name='enum'),
     path('api/list', get_list, name='list'),
     path('api/install', install, name='install'),

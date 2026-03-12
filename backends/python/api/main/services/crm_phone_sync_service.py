@@ -18,6 +18,7 @@ class PhoneSyncItem:
 
 
 class CRMPhoneSyncService:
+    # Robot 1 service: read linked CRM entities and rewrite PHONE values in-place.
     def __init__(self, bitrix24_account: "Bitrix24Account"):
         self.bitrix_client = BitrixClientService(bitrix24_account)
 

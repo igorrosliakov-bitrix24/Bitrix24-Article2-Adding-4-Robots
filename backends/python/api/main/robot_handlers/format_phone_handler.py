@@ -67,6 +67,7 @@ def _debug_sync_items(payload: dict, default_country_code: str) -> list[PhoneSyn
 
 
 def handle_format_phone(context: RobotExecutionContext) -> RobotHandlerResult:
+    # Robot 1 orchestration: resolve input, sync CRM phones, return a short summary.
     default_country_code = _read_property(
         context.payload,
         ("default_country_code",),

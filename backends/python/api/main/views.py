@@ -8,7 +8,9 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 
 from .services import (
     RobotExecutionContext,
+    RobotExecutionService,
     RobotHandlerNotFoundError,
+    RobotQueueService,
     RobotResultService,
     dispatch_robot,
     get_robot_catalog,
@@ -33,6 +35,7 @@ __all__ = [
     "register_robots",
     "execute_robot",
     "debug_execute_robot",
+    "debug_queue_robot",
 ]
 
 config = load_config()
@@ -164,14 +167,24 @@ def register_robots(request: AuthorizedRequest):
 @auth_required
 def execute_robot(request: AuthorizedRequest, robot_code: str):
     try:
-        context = RobotExecutionContext(
-            robot_code=robot_code,
-            payload=request.data,
-            bitrix24_account=request.bitrix24_account,
-            is_debug=False,
-        )
-        handler_result = dispatch_robot(context)
-        response_payload = RobotResultService(request.bitrix24_account).finalize(context, handler_result)
+        if RobotQueueService.is_enabled():
+            # Stage 7 asynchronous path: accept the Bitrix24 robot call quickly
+            # and hand off the actual execution to RabbitMQ/Celery.
+            task_id = RobotQueueService.enqueue(robot_code, request.data)
+            response_payload = {
+                "status": "queued",
+                "robot_code": robot_code,
+                "delivery": "queue",
+                "task_id": task_id,
+                "bitrix_event_token_found": bool(RobotResultService._extract_event_token(request.data)),
+            }
+        else:
+            # Fallback path for local development without RabbitMQ.
+            response_payload = RobotExecutionService.execute(
+                robot_code=robot_code,
+                payload=request.data,
+                is_debug=False,
+            )
     except RobotHandlerNotFoundError as error:
         logger.warning("Robot handler not found for code '%s'", robot_code)
         return JsonResponse({"error": str(error)}, status=404)
@@ -186,17 +199,32 @@ def execute_robot(request: AuthorizedRequest, robot_code: str):
 @collect_request_data
 def debug_execute_robot(request, robot_code: str):
     try:
-        context = RobotExecutionContext(
+        # Synchronous local endpoint for debugging any robot handler directly.
+        response_payload = RobotExecutionService.execute(
             robot_code=robot_code,
             payload=request.data,
-            bitrix24_account=None,
             is_debug=True,
         )
-        handler_result = dispatch_robot(context)
-        response_payload = RobotResultService().finalize(context, handler_result)
     except RobotHandlerNotFoundError as error:
         logger.warning("Debug robot handler not found for code '%s'", robot_code)
         return JsonResponse({"error": str(error)}, status=404)
 
     response_payload["debug_endpoint"] = True
     return JsonResponse(response_payload)
+
+
+@xframe_options_exempt
+@csrf_exempt
+@require_POST
+@collect_request_data
+@log_errors("debug_queue_robot")
+def debug_queue_robot(request, robot_code: str):
+    # Queue-oriented local endpoint for testing Stage 7 without a Bitrix24 portal callback.
+    task_id = RobotQueueService.enqueue(robot_code, request.data, is_debug=True)
+    return JsonResponse({
+        "status": "queued",
+        "robot_code": robot_code,
+        "delivery": "queue",
+        "task_id": task_id,
+        "debug_endpoint": True,
+    })

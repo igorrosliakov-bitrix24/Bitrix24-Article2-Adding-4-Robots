@@ -63,12 +63,26 @@ sed -i "s/YOUR_DOMAIN/$DOMAIN/g" infrastructure/nginx/nginx.conf
 
 # 5. Issue SSL certificate (first-time only — skip if cert already exists)
 CERT_PATH="infrastructure/nginx/certs/live/$DOMAIN/fullchain.pem"
-if [ ! -f "$CERT_PATH" ]; then
+SELF_SIGNED_MARKER="infrastructure/nginx/certs/.self-signed"
+
+if [ ! -f "$CERT_PATH" ] || [ -f "$SELF_SIGNED_MARKER" ]; then
   echo ""
   echo "[4/6] Issuing Let's Encrypt certificate..."
   echo "      (Nginx will start on port 80 for ACME challenge)"
 
-  # Start Nginx in HTTP-only mode for ACME challenge
+  # Create a temporary self-signed cert so nginx can start (it needs a cert
+  # file to load the SSL server block, even before the real cert is issued)
+  if [ ! -f "$CERT_PATH" ]; then
+    mkdir -p "infrastructure/nginx/certs/live/$DOMAIN"
+    openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout "infrastructure/nginx/certs/live/$DOMAIN/privkey.pem" \
+      -out   "infrastructure/nginx/certs/live/$DOMAIN/fullchain.pem" \
+      -days 1 -subj "/CN=$DOMAIN" 2>/dev/null
+    touch "$SELF_SIGNED_MARKER"
+    echo "  (temporary self-signed cert created for nginx startup)"
+  fi
+
+  # Start nginx — it will use the self-signed cert on 443 and serve ACME on 80
   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
     $PROFILE_FLAGS up -d nginx
 
@@ -83,7 +97,11 @@ if [ ! -f "$CERT_PATH" ]; then
     --no-eff-email \
     -d "$DOMAIN"
 
+  rm -f "$SELF_SIGNED_MARKER"
   echo "Certificate issued successfully."
+
+  # Reload nginx so it picks up the real cert
+  docker exec nginx nginx -s reload || true
 else
   echo "[4/6] SSL certificate already exists, skipping."
 fi

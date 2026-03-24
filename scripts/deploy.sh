@@ -5,6 +5,11 @@
 # =============================================================================
 set -euo pipefail
 
+# Load .env if present
+if [ -f .env ]; then
+  set -a; source .env; set +a
+fi
+
 DOMAIN="${VIRTUAL_HOST:-}"
 WITH_QUEUE=0
 PROFILE_FLAGS="--profile frontend --profile python --profile db-postgres"

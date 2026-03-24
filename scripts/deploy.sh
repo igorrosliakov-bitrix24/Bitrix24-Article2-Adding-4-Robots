@@ -42,7 +42,13 @@ fi
 # 2. Pull latest code
 echo ""
 echo "[1/6] Pulling latest code..."
-git pull origin "$(git branch --show-current)"
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  git stash
+  git pull origin "$(git branch --show-current)"
+  git stash pop
+else
+  git pull origin "$(git branch --show-current)"
+fi
 
 # 3. Ensure nginx cert dirs exist
 echo ""

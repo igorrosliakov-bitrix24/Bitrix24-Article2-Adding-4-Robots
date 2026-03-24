@@ -75,7 +75,7 @@ if [ ! -f "$CERT_PATH" ]; then
   sleep 3
 
   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-    $PROFILE_FLAGS run --rm certbot certonly \
+    $PROFILE_FLAGS run --rm --entrypoint certbot certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email "admin@$DOMAIN" \

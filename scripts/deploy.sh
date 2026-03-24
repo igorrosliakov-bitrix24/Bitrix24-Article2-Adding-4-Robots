@@ -7,7 +7,7 @@ set -euo pipefail
 
 DOMAIN="${VIRTUAL_HOST:-}"
 WITH_QUEUE=0
-PROFILES="frontend,python,db-postgres"
+PROFILE_FLAGS="--profile frontend --profile python --profile db-postgres"
 
 # Parse args
 for arg in "$@"; do
@@ -17,7 +17,7 @@ for arg in "$@"; do
 done
 
 if [ "$WITH_QUEUE" = "1" ]; then
-  PROFILES="frontend,python,python-worker,queue,db-postgres"
+  PROFILE_FLAGS="--profile frontend --profile python --profile python-worker --profile queue --profile db-postgres"
 fi
 
 echo "=========================================="
@@ -59,12 +59,12 @@ if [ ! -f "$CERT_PATH" ]; then
 
   # Start Nginx in HTTP-only mode for ACME challenge
   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-    up -d nginx
+    $PROFILE_FLAGS up -d nginx
 
   sleep 3
 
   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-    run --rm certbot certonly \
+    $PROFILE_FLAGS run --rm certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email "admin@$DOMAIN" \
@@ -83,7 +83,7 @@ echo "[5/6] Building production images..."
 BUILD_TARGET=production docker compose \
   -f docker-compose.yml \
   -f docker-compose.prod.yml \
-  --profile "$PROFILES" \
+  $PROFILE_FLAGS \
   build --no-cache
 
 echo ""
@@ -91,7 +91,7 @@ echo "[6/6] Starting all services..."
 BUILD_TARGET=production docker compose \
   -f docker-compose.yml \
   -f docker-compose.prod.yml \
-  --profile "$PROFILES" \
+  $PROFILE_FLAGS \
   up -d
 
 # 7. Run Django migrations and collectstatic

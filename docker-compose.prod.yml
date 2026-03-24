@@ -25,8 +25,12 @@ services:
       - ./infrastructure/nginx/certbot-webroot:/var/www/certbot:ro
       - python_static:/var/www/static:ro
     depends_on:
-      - frontend
-      - api-python
+      frontend:
+        condition: service_started
+        required: false
+      api-python:
+        condition: service_started
+        required: false
     networks:
       - internal-net
 

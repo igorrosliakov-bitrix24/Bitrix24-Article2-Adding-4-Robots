@@ -90,6 +90,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "api/static/"
+STATIC_ROOT = "/var/www/static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOW_ALL_ORIGINS = True

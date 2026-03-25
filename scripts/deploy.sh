@@ -5,6 +5,11 @@
 # =============================================================================
 set -euo pipefail
 
+# Load .env if present
+if [ -f .env ]; then
+  set -a; source .env; set +a
+fi
+
 DOMAIN="${VIRTUAL_HOST:-}"
 WITH_QUEUE=0
 PROFILE_FLAGS="--profile frontend --profile python --profile db-postgres"
@@ -37,7 +42,13 @@ fi
 # 2. Pull latest code
 echo ""
 echo "[1/6] Pulling latest code..."
-git pull origin "$(git branch --show-current)"
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  git stash
+  git pull origin "$(git branch --show-current)"
+  git stash pop
+else
+  git pull origin "$(git branch --show-current)"
+fi
 
 # 3. Ensure nginx cert dirs exist
 echo ""
@@ -52,19 +63,64 @@ sed -i "s/YOUR_DOMAIN/$DOMAIN/g" infrastructure/nginx/nginx.conf
 
 # 5. Issue SSL certificate (first-time only — skip if cert already exists)
 CERT_PATH="infrastructure/nginx/certs/live/$DOMAIN/fullchain.pem"
-if [ ! -f "$CERT_PATH" ]; then
+SELF_SIGNED_MARKER="infrastructure/nginx/certs/.self-signed"
+
+if [ ! -f "$CERT_PATH" ] || [ -f "$SELF_SIGNED_MARKER" ]; then
   echo ""
   echo "[4/6] Issuing Let's Encrypt certificate..."
   echo "      (Nginx will start on port 80 for ACME challenge)"
 
-  # Start Nginx in HTTP-only mode for ACME challenge
+  # Create a temporary self-signed cert so nginx can start (it needs a cert
+  # file to load the SSL server block, even before the real cert is issued)
+  if [ ! -f "$CERT_PATH" ]; then
+    mkdir -p "infrastructure/nginx/certs/live/$DOMAIN"
+    openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout "infrastructure/nginx/certs/live/$DOMAIN/privkey.pem" \
+      -out   "infrastructure/nginx/certs/live/$DOMAIN/fullchain.pem" \
+      -days 1 -subj "/CN=$DOMAIN" 2>/dev/null
+    touch "$SELF_SIGNED_MARKER"
+    echo "  (temporary self-signed cert created for nginx startup)"
+  fi
+
+  # Remove any stale nginx container and start fresh so the new cert is visible
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+    $PROFILE_FLAGS rm -sf nginx 2>/dev/null || true
   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
     $PROFILE_FLAGS up -d nginx
 
-  sleep 3
+  # Wait until Nginx actually responds on port 80 (restart backoff can be slow).
+  # Use `CMD || VAR=fallback` form so set -e doesn't kill the script when curl
+  # exits 7 (ECONNREFUSED) — that pattern is exempt from set -e.
+  echo "  Waiting for Nginx to be ready..."
+  NGINX_READY=0
+  for i in $(seq 1 30); do
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
+      http://localhost/.well-known/acme-challenge/ 2>/dev/null) || HTTP_CODE="000"
+    if [ "$HTTP_CODE" != "000" ]; then
+      echo "  Nginx is up (HTTP $HTTP_CODE)."
+      NGINX_READY=1
+      break
+    fi
+    echo "  [$i/30] nginx not yet ready, retrying..."
+    sleep 2
+  done
+  if [ "$NGINX_READY" = "0" ]; then
+    echo "ERROR: Nginx failed to start within 60 s. Container status:"
+    docker ps -a --filter name=nginx
+    echo "Last logs:"
+    docker logs nginx --tail 30 2>&1 || true
+    exit 1
+  fi
+
+  # nginx has loaded the self-signed cert into memory and is serving port 80.
+  # Remove it now so certbot can write the real Let's Encrypt cert to that path
+  # without hitting "live directory exists" conflict.
+  rm -rf "infrastructure/nginx/certs/live/$DOMAIN" \
+         "infrastructure/nginx/certs/archive/$DOMAIN" \
+         "infrastructure/nginx/certs/renewal/$DOMAIN.conf" 2>/dev/null || true
 
   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-    $PROFILE_FLAGS run --rm certbot certonly \
+    $PROFILE_FLAGS run --rm --entrypoint certbot certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email "admin@$DOMAIN" \
@@ -72,7 +128,11 @@ if [ ! -f "$CERT_PATH" ]; then
     --no-eff-email \
     -d "$DOMAIN"
 
+  rm -f "$SELF_SIGNED_MARKER"
   echo "Certificate issued successfully."
+
+  # Reload nginx so it picks up the real cert
+  docker exec nginx nginx -s reload || true
 else
   echo "[4/6] SSL certificate already exists, skipping."
 fi

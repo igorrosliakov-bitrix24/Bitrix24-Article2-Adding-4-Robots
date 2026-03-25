@@ -22,7 +22,6 @@ RUN pnpm run build
 # Production stage
 FROM node:20-alpine AS production
 WORKDIR /app
-COPY --from=builder /app/.output ./
-COPY --from=builder /app/package*.json ./
-EXPOSE 80
+COPY --from=builder /app/.output/ ./
+EXPOSE 3000
 CMD ["node", "/app/server/index.mjs"]

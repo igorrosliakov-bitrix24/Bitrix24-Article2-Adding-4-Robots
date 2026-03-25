@@ -82,11 +82,29 @@ if [ ! -f "$CERT_PATH" ] || [ -f "$SELF_SIGNED_MARKER" ]; then
     echo "  (temporary self-signed cert created for nginx startup)"
   fi
 
-  # Start nginx — it will use the self-signed cert on 443 and serve ACME on 80
+  # Remove any stale nginx container and start fresh so the new cert is visible
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+    $PROFILE_FLAGS rm -sf nginx 2>/dev/null || true
   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
     $PROFILE_FLAGS up -d nginx
 
-  sleep 3
+  # Wait until Nginx actually responds on port 80 (restart backoff can be slow)
+  echo "  Waiting for Nginx to be ready..."
+  NGINX_READY=0
+  for i in $(seq 1 30); do
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://localhost/ 2>/dev/null)
+    if [ -n "$HTTP_CODE" ] && [ "$HTTP_CODE" != "000" ]; then
+      echo "  Nginx is up (HTTP $HTTP_CODE)."
+      NGINX_READY=1
+      break
+    fi
+    sleep 2
+  done
+  if [ "$NGINX_READY" = "0" ]; then
+    echo "ERROR: Nginx failed to start within 60 s. Last logs:"
+    docker logs nginx --tail 20 2>&1
+    exit 1
+  fi
 
   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
     $PROFILE_FLAGS run --rm --entrypoint certbot certbot certonly \

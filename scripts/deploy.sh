@@ -88,21 +88,27 @@ if [ ! -f "$CERT_PATH" ] || [ -f "$SELF_SIGNED_MARKER" ]; then
   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
     $PROFILE_FLAGS up -d nginx
 
-  # Wait until Nginx actually responds on port 80 (restart backoff can be slow)
+  # Wait until Nginx actually responds on port 80 (restart backoff can be slow).
+  # The "|| echo 000" prevents set -e from killing the script when curl gets
+  # ECONNREFUSED (exit code 7) while nginx is still starting up.
   echo "  Waiting for Nginx to be ready..."
   NGINX_READY=0
   for i in $(seq 1 30); do
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://localhost/ 2>/dev/null)
-    if [ -n "$HTTP_CODE" ] && [ "$HTTP_CODE" != "000" ]; then
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
+      http://localhost/.well-known/acme-challenge/ 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" != "000" ]; then
       echo "  Nginx is up (HTTP $HTTP_CODE)."
       NGINX_READY=1
       break
     fi
+    echo "  [$i/30] nginx not yet ready, retrying..."
     sleep 2
   done
   if [ "$NGINX_READY" = "0" ]; then
-    echo "ERROR: Nginx failed to start within 60 s. Last logs:"
-    docker logs nginx --tail 20 2>&1
+    echo "ERROR: Nginx failed to start within 60 s. Container status:"
+    docker ps -a --filter name=nginx
+    echo "Last logs:"
+    docker logs nginx --tail 30 2>&1 || true
     exit 1
   fi
 

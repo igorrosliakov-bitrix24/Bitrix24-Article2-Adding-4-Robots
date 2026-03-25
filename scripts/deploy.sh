@@ -89,13 +89,13 @@ if [ ! -f "$CERT_PATH" ] || [ -f "$SELF_SIGNED_MARKER" ]; then
     $PROFILE_FLAGS up -d nginx
 
   # Wait until Nginx actually responds on port 80 (restart backoff can be slow).
-  # The "|| echo 000" prevents set -e from killing the script when curl gets
-  # ECONNREFUSED (exit code 7) while nginx is still starting up.
+  # Use `CMD || VAR=fallback` form so set -e doesn't kill the script when curl
+  # exits 7 (ECONNREFUSED) — that pattern is exempt from set -e.
   echo "  Waiting for Nginx to be ready..."
   NGINX_READY=0
   for i in $(seq 1 30); do
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
-      http://localhost/.well-known/acme-challenge/ 2>/dev/null || echo "000")
+      http://localhost/.well-known/acme-challenge/ 2>/dev/null) || HTTP_CODE="000"
     if [ "$HTTP_CODE" != "000" ]; then
       echo "  Nginx is up (HTTP $HTTP_CODE)."
       NGINX_READY=1
@@ -111,6 +111,13 @@ if [ ! -f "$CERT_PATH" ] || [ -f "$SELF_SIGNED_MARKER" ]; then
     docker logs nginx --tail 30 2>&1 || true
     exit 1
   fi
+
+  # nginx has loaded the self-signed cert into memory and is serving port 80.
+  # Remove it now so certbot can write the real Let's Encrypt cert to that path
+  # without hitting "live directory exists" conflict.
+  rm -rf "infrastructure/nginx/certs/live/$DOMAIN" \
+         "infrastructure/nginx/certs/archive/$DOMAIN" \
+         "infrastructure/nginx/certs/renewal/$DOMAIN.conf" 2>/dev/null || true
 
   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
     $PROFILE_FLAGS run --rm --entrypoint certbot certbot certonly \

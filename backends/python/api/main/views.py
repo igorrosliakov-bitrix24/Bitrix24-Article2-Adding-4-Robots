@@ -110,6 +110,7 @@ def get_list(request: AuthorizedRequest):
 @auth_required
 def install(request: AuthorizedRequest):
     bitrix24_account = request.bitrix24_account
+    auth_user_id = int(request.data.get("AUTH_USER_ID", request.bitrix24_account.b24_user_id))
 
     ApplicationInstallation.objects.update_or_create(
         bitrix_24_account=bitrix24_account,
@@ -120,7 +121,16 @@ def install(request: AuthorizedRequest):
         },
     )
 
-    return JsonResponse({"message": "Installation successful"})
+    registered_robots = register_robots_in_bitrix24(
+        bitrix24_account=bitrix24_account,
+        app_base_url=config.app_base_url,
+        auth_user_id=auth_user_id,
+    )
+
+    return JsonResponse({
+        "message": "Installation successful",
+        "registered_robots": registered_robots,
+    })
 
 
 @xframe_options_exempt

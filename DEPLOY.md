@@ -131,7 +131,7 @@ JWT_SECRET=your-very-long-random-secret-here
 # Данные приложения из личного кабинета Bitrix24
 CLIENT_ID=local.xxxxxxxxxxxxxxxx.xxxxxxxx
 CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-SCOPE=crm,user_brief,pull,placement,userfieldconfig
+SCOPE=crm,user_brief,pull,placement,userfieldconfig,bizproc
 
 # База данных (PostgreSQL)
 DB_TYPE=postgresql
@@ -241,7 +241,7 @@ curl https://your-domain.com/api/robots/catalog
 - **URL обработчика**: `https://your-domain.com/api/install`
 - **Начальная страница**: `https://your-domain.com/`
 
-После первого запуска приложения из Bitrix24 все четыре робота появятся в дизайнере бизнес-процессов.
+После установки приложения Bitrix24 зарегистрирует все четыре робота через backend install hook, и они появятся в дизайнере бизнес-процессов.
 
 ---
 

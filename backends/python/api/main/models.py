@@ -73,7 +73,10 @@ class Bitrix24Account(models.Model, AbstractBitrixToken):
         self.save(update_fields=["portal_url"])
 
     def on_oauth_token_renewed_event(self, event: OAuthTokenRenewedEvent):
-        self.expires = event.renewed_oauth_token.oauth_token.expires
+        oauth_token = event.renewed_oauth_token.oauth_token
+        self.access_token = oauth_token.access_token
+        self.refresh_token = oauth_token.refresh_token
+        self.expires = int(oauth_token.expires.timestamp())
         self.expires_in = event.renewed_oauth_token.oauth_token.expires_in
         self.save(update_fields=["access_token", "refresh_token", "expires", "expires_in"])
 

@@ -19,8 +19,14 @@ class DealSumResult:
     current_deal_id: str
 
 
+class CurrencyConversionError(ValueError):
+    pass
+
+
 class DealSumService:
     # Robot 3 service: find the current deal client and sum all client deals.
+    TARGET_CURRENCY_ID = "USD"
+
     def __init__(self, bitrix24_account: "Bitrix24Account"):
         self.bitrix_client = BitrixClientService(bitrix24_account)
 
@@ -53,26 +59,36 @@ class DealSumService:
             return DealSumResult(
                 deal_count=0,
                 total_amount="0.00",
-                currency_id=str(current_deal.get("CURRENCY_ID", "") or ""),
+                currency_id=self.TARGET_CURRENCY_ID,
                 client_entity_type="",
                 client_entity_id="",
                 current_deal_id=str(deal_id),
             )
 
         deals = self._list_deals({filter_field: client_entity_id})
+        currency_rates = self._get_currency_rates({
+            self.TARGET_CURRENCY_ID,
+            *[
+                str(deal_item.get("CURRENCY_ID", "") or "").upper()
+                for deal_item in deals
+                if isinstance(deal_item, dict)
+            ],
+        })
         total_amount = Decimal("0.00")
 
         for deal_item in deals:
             if not isinstance(deal_item, dict):
                 continue
-            total_amount += _to_decimal(deal_item.get("OPPORTUNITY"))
-
-        currency_id = str(current_deal.get("CURRENCY_ID", "") or "")
+            total_amount += self._convert_amount_to_target(
+                amount=_to_decimal(deal_item.get("OPPORTUNITY")),
+                source_currency_id=str(deal_item.get("CURRENCY_ID", "") or "").upper(),
+                currency_rates=currency_rates,
+            )
 
         return DealSumResult(
             deal_count=len([deal_item for deal_item in deals if isinstance(deal_item, dict)]),
             total_amount=f"{total_amount.quantize(Decimal('0.01'))}",
-            currency_id=currency_id,
+            currency_id=self.TARGET_CURRENCY_ID,
             client_entity_type=client_entity_type,
             client_entity_id=str(client_entity_id),
             current_deal_id=str(deal_id),
@@ -85,7 +101,7 @@ class DealSumService:
         while start is not None:
             params = {
                 "filter": filter_values,
-                "select": ["ID", "TITLE", "OPPORTUNITY", "COMPANY_ID", "CONTACT_ID"],
+                "select": ["ID", "TITLE", "OPPORTUNITY", "CURRENCY_ID", "COMPANY_ID", "CONTACT_ID"],
                 "start": start,
             }
             response = self.bitrix_client.call_method("crm.deal.list", params)
@@ -94,6 +110,96 @@ class DealSumService:
             start = next_start
 
         return deals
+
+    def _convert_amount_to_target(
+        self,
+        amount: Decimal,
+        source_currency_id: str,
+        currency_rates: dict[str, Decimal],
+    ) -> Decimal:
+        source_currency_id = source_currency_id.upper()
+        if not source_currency_id:
+            raise CurrencyConversionError("Deal currency is empty, USD conversion is not possible")
+
+        if source_currency_id == self.TARGET_CURRENCY_ID or amount == Decimal("0.00"):
+            return amount
+
+        source_rate = currency_rates[source_currency_id]
+        target_rate = currency_rates[self.TARGET_CURRENCY_ID]
+        return amount * source_rate / target_rate
+
+    def _get_currency_rates(self, currency_ids: set[str]) -> dict[str, Decimal]:
+        normalized_currency_ids = {currency_id.upper() for currency_id in currency_ids if currency_id}
+        if not normalized_currency_ids:
+            return {}
+
+        response = self.bitrix_client.call_method("crm.currency.list", {})
+        currencies = self._extract_currency_list(response)
+        rates: dict[str, Decimal] = {}
+
+        for currency_item in currencies:
+            currency_code = str(
+                currency_item.get("CURRENCY")
+                or currency_item.get("currency")
+                or currency_item.get("CURRENCY_ID")
+                or currency_item.get("id")
+                or ""
+            ).upper()
+            if not currency_code or currency_code not in normalized_currency_ids:
+                continue
+
+            rate_to_base = self._extract_rate_to_base(currency_item)
+            if rate_to_base is not None:
+                rates[currency_code] = rate_to_base
+
+        missing_currencies = sorted(normalized_currency_ids - set(rates))
+        if missing_currencies:
+            raise CurrencyConversionError(
+                f"Bitrix24 did not return exchange rates for currencies: {', '.join(missing_currencies)}"
+            )
+
+        return rates
+
+    @staticmethod
+    def _extract_currency_list(response: Any) -> list[dict[str, Any]]:
+        if hasattr(response, "result"):
+            result = response.result
+        elif isinstance(response, dict):
+            result = response.get("result", response)
+        else:
+            result = response
+
+        if isinstance(result, list):
+            return [item for item in result if isinstance(item, dict)]
+
+        if isinstance(result, dict):
+            items = result.get("items") or result.get("currencies") or result.get("result") or []
+            if isinstance(items, list):
+                return [item for item in items if isinstance(item, dict)]
+
+        return []
+
+    @staticmethod
+    def _extract_rate_to_base(currency_item: dict[str, Any]) -> Decimal | None:
+        is_base = str(currency_item.get("BASE", "") or currency_item.get("base", "")).upper() in {"Y", "1", "TRUE"}
+        is_primary = currency_item.get("is_primary") in {True, "Y", "1", 1}
+        if is_base or is_primary:
+            return Decimal("1")
+
+        amount = _to_decimal_or_none(currency_item.get("AMOUNT"))
+        amount_cnt = _to_decimal_or_none(currency_item.get("AMOUNT_CNT"))
+        if amount is not None and amount_cnt not in (None, Decimal("0")):
+            return amount / amount_cnt
+
+        current_base_rate = _to_decimal_or_none(currency_item.get("CURRENT_BASE_RATE"))
+        if current_base_rate is not None:
+            return current_base_rate
+
+        rate = _to_decimal_or_none(currency_item.get("RATE") or currency_item.get("rate"))
+        if rate is not None:
+            return rate
+
+        return None
 
     @staticmethod
     def _extract_result(response: Any) -> Any:
@@ -133,3 +239,13 @@ def _to_decimal(raw_value: Any) -> Decimal:
         return Decimal(str(raw_value or 0))
     except (InvalidOperation, ValueError):
         return Decimal("0.00")
+
+
+def _to_decimal_or_none(raw_value: Any) -> Decimal | None:
+    if raw_value in (None, ""):
+        return None
+
+    try:
+        return Decimal(str(raw_value))
+    except (InvalidOperation, ValueError):
+        return None

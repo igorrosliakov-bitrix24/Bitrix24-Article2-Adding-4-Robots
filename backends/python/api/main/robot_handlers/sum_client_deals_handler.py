@@ -1,7 +1,7 @@
 from decimal import Decimal, InvalidOperation
 
 from ..services.crm_timeline_service import CRMTimelineService
-from ..services.deal_sum_service import DealSumResult, DealSumService
+from ..services.deal_sum_service import CurrencyConversionError, DealSumResult, DealSumService
 from ..services.robot_types import RobotExecutionContext, RobotHandlerResult
 
 
@@ -52,17 +52,35 @@ def _debug_result(payload: dict) -> DealSumResult | None:
 
 def handle_sum_client_deals(context: RobotExecutionContext) -> RobotHandlerResult:
     # Robot 3 orchestration: calculate the client deal total and expose it to BP plus deal timeline.
-    if context.bitrix24_account is not None:
-        result = DealSumService(context.bitrix24_account).summarize_from_document(context.payload)
-    else:
-        result = _debug_result(context.payload)
+    try:
+        if context.bitrix24_account is not None:
+            result = DealSumService(context.bitrix24_account).summarize_from_document(context.payload)
+        else:
+            result = _debug_result(context.payload)
+    except CurrencyConversionError as error:
+        if context.bitrix24_account is not None:
+            CRMTimelineService(context.bitrix24_account).add_comment_from_document(
+                context.payload,
+                f"Не удалось посчитать сумму сделок клиента в USD: {error}",
+            )
+
+        return RobotHandlerResult(
+            return_values={
+                "deal_count": "0",
+                "total_amount": "0.00",
+                "currency_id": DealSumService.TARGET_CURRENCY_ID,
+                "client_entity_type": "",
+                "client_entity_id": "",
+            },
+            log_message=f"sum_client_deals currency conversion error: {error}",
+        )
 
     if result is None:
         return RobotHandlerResult(
             return_values={
                 "deal_count": "0",
                 "total_amount": "0.00",
-                "currency_id": "",
+                "currency_id": DealSumService.TARGET_CURRENCY_ID,
                 "client_entity_type": "",
                 "client_entity_id": "",
             },

@@ -41,9 +41,11 @@ def _debug_sync_items(payload: dict) -> list[NameSyncItem]:
     company_data = debug_entities.get("company")
     if isinstance(company_data, dict):
         fields_before = {
+            "TITLE": str(company_data.get("TITLE", "") or "").strip(),
             "CONTACT_PERSON": str(company_data.get("CONTACT_PERSON", "") or "").strip(),
         }
         fields_after = {
+            "TITLE": _normalize_local_value(fields_before["TITLE"]),
             "CONTACT_PERSON": _normalize_local_value(fields_before["CONTACT_PERSON"]),
         }
         updated_field_count = sum(

@@ -40,7 +40,7 @@ class CRMNameSyncService:
 
         if document_token.startswith("COMPANY_"):
             company_id = int(document_token.split("_", 1)[1])
-            sync_item = self._sync_company_contact_person(company_id)
+            sync_item = self._sync_company_name_fields(company_id)
             return [sync_item] if sync_item else []
 
         return []
@@ -61,7 +61,7 @@ class CRMNameSyncService:
 
         company_id = CRMPhoneSyncService._normalize_entity_id(deal.get("COMPANY_ID"))
         if company_id is not None:
-            sync_item = self._sync_company_contact_person(company_id)
+            sync_item = self._sync_company_name_fields(company_id)
             if sync_item is not None:
                 sync_items.append(sync_item)
 
@@ -82,13 +82,13 @@ class CRMNameSyncService:
             tracked_fields=tracked_fields,
         )
 
-    def _sync_company_contact_person(self, company_id: int) -> NameSyncItem | None:
+    def _sync_company_name_fields(self, company_id: int) -> NameSyncItem | None:
         entity_response = self.bitrix_client.call_method("crm.company.get", {"id": company_id})
         entity = self._extract_result(entity_response)
         if not isinstance(entity, dict):
             return None
 
-        tracked_fields = ("CONTACT_PERSON",)
+        tracked_fields = ("TITLE", "CONTACT_PERSON")
         return self._sync_entity_fields(
             entity_type="company",
             entity_id=company_id,

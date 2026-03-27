@@ -15,6 +15,8 @@ const { $initializeB24Frame } = useNuxtApp()
 let $b24: null | B24Frame = null
 
 const apiStore = useApiStore()
+const robotRegistrationStatus = ref<'idle' | 'success' | 'error'>('idle')
+const robotRegistrationMessage = ref('')
 // endregion ////
 
 // region Actions ////
@@ -28,6 +30,29 @@ async function getItems() {
   const items = await apiStore.getList()
 
   $logger.info(items)
+}
+
+async function registerRobots() {
+  try {
+    const response = await apiStore.registerRobots()
+    const registeredRobots = Array.isArray(response?.registered_robots)
+      ? response.registered_robots
+      : []
+
+    robotRegistrationStatus.value = 'success'
+    robotRegistrationMessage.value = registeredRobots.length > 0
+      ? `Роботы зарегистрированы: ${registeredRobots.map((item: { code: string }) => item.code).join(', ')}`
+      : 'Запрос выполнен, но сервер не вернул список роботов'
+
+    $logger.info('Robots registered', response)
+  } catch (error) {
+    robotRegistrationStatus.value = 'error'
+    robotRegistrationMessage.value = error instanceof Error
+      ? error.message
+      : String(error)
+
+    $logger.error('Robot registration failed', error)
+  }
 }
 // endregion ////
 
@@ -49,6 +74,7 @@ onMounted(async () => {
     isLoading.value = true
     $b24 = await $initializeB24Frame()
     await initApp($b24, localesI18n, setLocale)
+    await registerRobots()
 
     await $b24.parent.setTitle(t('page.index.seo.title'))
 
@@ -76,8 +102,16 @@ onMounted(async () => {
       </template>
 
       <BackendStatus />
+      <B24Alert
+        v-if="robotRegistrationStatus !== 'idle'"
+        :title="robotRegistrationStatus === 'success' ? 'Роботы Bitrix24' : 'Ошибка регистрации роботов'"
+        :color="robotRegistrationStatus === 'success' ? 'air-primary-success' : 'air-primary-alert'"
+        :description="robotRegistrationMessage"
+        size="sm"
+      />
 
       <template #footer>
+        <B24Button label="Зарегистрировать роботов повторно" loading-auto @click="registerRobots" />
         <B24Button label="getEnums" loading-auto @click="getEnums" />
         <B24Button label="getItems" loading-auto @click="getItems" />
       </template>

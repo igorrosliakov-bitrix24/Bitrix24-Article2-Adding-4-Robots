@@ -238,13 +238,13 @@ curl https://your-domain.com/api/robots/catalog
 ### Шаг 8. Прописываем URL в настройках приложения Bitrix24
 
 В личном кабинете разработчика Bitrix24 → ваше приложение:
-- **URL обработчика**: `https://your-domain.com/api/install`
+- **URL обработчика**: `https://your-domain.com/`
 - **Путь для первоначальной установки**: `https://your-domain.com/install`
 
 При первой установке Bitrix24 запускает frontend install wizard. Внутри него:
 - backend шаг `/api/install` сохраняет установку и auth-данные
 - шаг `robots` вызывает `/api/robots/register`
-- после завершения wizard вызывает `installFinish()`
+- после завершения wizard вызывает `installFinish()`, а затем Bitrix24 открывает основной URL приложения `/`
 
 Если вы добавили новые install-шаги, роботов, placements или user fields, переустановите приложение в портале, чтобы wizard прошёл заново.
 

@@ -14,7 +14,6 @@ from .services import (
     RobotResultService,
     dispatch_robot,
     get_robot_catalog,
-    register_robots_in_bitrix24,
 )
 from .utils.decorators import auth_required, collect_request_data, log_errors
 from .utils import AuthorizedRequest
@@ -110,7 +109,6 @@ def get_list(request: AuthorizedRequest):
 @auth_required
 def install(request: AuthorizedRequest):
     bitrix24_account = request.bitrix24_account
-    auth_user_id = int(request.data.get("AUTH_USER_ID", request.bitrix24_account.b24_user_id))
 
     ApplicationInstallation.objects.update_or_create(
         bitrix_24_account=bitrix24_account,
@@ -121,16 +119,7 @@ def install(request: AuthorizedRequest):
         },
     )
 
-    registered_robots = register_robots_in_bitrix24(
-        bitrix24_account=bitrix24_account,
-        app_base_url=config.app_base_url,
-        auth_user_id=auth_user_id,
-    )
-
-    return JsonResponse({
-        "message": "Installation successful",
-        "registered_robots": registered_robots,
-    })
+    return JsonResponse({"message": "Installation successful"})
 
 
 @xframe_options_exempt

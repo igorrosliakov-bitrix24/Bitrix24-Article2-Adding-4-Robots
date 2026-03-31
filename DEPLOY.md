@@ -241,7 +241,12 @@ curl https://your-domain.com/api/robots/catalog
 - **URL обработчика**: `https://your-domain.com/api/install`
 - **Начальная страница**: `https://your-domain.com/`
 
-После установки приложения Bitrix24 зарегистрирует все четыре робота через backend install hook, и они появятся в дизайнере бизнес-процессов.
+При первой установке Bitrix24 запускает frontend install wizard. Внутри него:
+- backend шаг `/api/install` сохраняет установку и auth-данные
+- шаг `robots` вызывает `/api/robots/register`
+- после завершения wizard вызывает `installFinish()`
+
+Если вы добавили новые install-шаги, роботов, placements или user fields, переустановите приложение в портале, чтобы wizard прошёл заново.
 
 ---
 

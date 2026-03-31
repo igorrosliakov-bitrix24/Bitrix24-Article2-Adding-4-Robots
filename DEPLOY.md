@@ -239,7 +239,7 @@ curl https://your-domain.com/api/robots/catalog
 
 В личном кабинете разработчика Bitrix24 → ваше приложение:
 - **URL обработчика**: `https://your-domain.com/api/install`
-- **Начальная страница**: `https://your-domain.com/`
+- **Путь для первоначальной установки**: `https://your-domain.com/install`
 
 При первой установке Bitrix24 запускает frontend install wizard. Внутри него:
 - backend шаг `/api/install` сохраняет установку и auth-данные

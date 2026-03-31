@@ -14,6 +14,7 @@ from .services import (
     RobotResultService,
     dispatch_robot,
     get_robot_catalog,
+    register_robots_in_bitrix24,
 )
 from .utils.decorators import auth_required, collect_request_data, log_errors
 from .utils import AuthorizedRequest
